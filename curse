@@ -1,0 +1,46 @@
+# Moonscarlet's Chat Scanner
+
+Chat Scanner watches chat for you and alerts you only when someone posts something you are waiting for, with a sound and a clickable class-colored player name so you can whisper/invite right away.
+
+## How I use it
+I keep Trade, LFG and World in a separate chat tab, so my main tab stays clean. When I'm looking for something, I add it to the watch list and get an alert in my main tab only when it shows up.
+
+## Features
+- **Simple in-game window.** Type `/cs` or click the minimap button. No commands needed.
+- **Smart keywords.** Match a word or phrase, require several words at once, or skip messages containing words you don't want (for example, find "LFM Molten Core" but skip "gold").
+- **Edit anytime.** Change a keyword in place with one click.
+- **Choose your chats.** Guild, Say, Yell and channels are on by default. Party, Raid, Battleground, Officer and Whispers are optional.
+- **Ignore list.** Silence spammers in the scanner without touching your normal ignore list.
+- **Alerts your way.** Sound (even if game sound is muted), and an optional taskbar flash when the game is in the background.
+- **Class-colored, clickable player names** in every alert.
+- Your own messages and repeated messages are skipped, and everything is saved between sessions.
+
+## Getting started
+1. Type `/cs` (or click the minimap button).
+2. On the **Keywords** tab, type what you're looking for and press Enter.
+3. Check the **Chats** tab to choose where to listen.
+
+## Keywords
+| You type | It matches |
+|---|---|
+| `LFM Molten Core` | messages containing that phrase |
+| `tank,dungeon` (commas) | messages containing **both** words |
+| *Message contains:* `LFM MC` + *but NOT:* `gold,boost` | LFM MC, but not if it mentions gold or boost |
+
+Spaces count exactly as typed, so `" tank "` only matches the whole word "tank" and not "tanked".
+
+## Slash commands (optional)
+| Command | What it does |
+|---|---|
+| `/cs` | Open or close the window |
+| `/cs add [text]` | Add a keyword (`_` = space, `\|` = all must match, `-` = exclude) |
+| `/cs del [number]` | Remove a keyword |
+| `/cs list` | Show your keywords and settings |
+| `/cs clear` | Clear all keywords |
+| `/cs addplayer [name]` | Ignore a player |
+| `/cs delplayer [number]` | Stop ignoring a player |
+| `/cs players` | Show ignored players |
+| `/cs clearplayers` | Clear the ignore list |
+| `/cs enable` / `/cs disable` | Turn scanning on or off |
+| `/cs mute` / `/cs master` / `/cs flash` | Toggle sound / play when muted / taskbar flash |
+| `/cs help` | Show all commands |

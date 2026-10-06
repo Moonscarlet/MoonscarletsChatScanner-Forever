@@ -15,12 +15,51 @@ local defaults = {
 local settings = {}
 for k, v in pairs(defaults) do settings[k] = v end
 
+local sources = {
+    { key = "guild", label = "Guild", desc = "Guild chat", default = true,
+      events = { "CHAT_MSG_GUILD" } },
+    { key = "say", label = "Say", desc = "Nearby players talking around you", default = true,
+      events = { "CHAT_MSG_SAY" } },
+    { key = "yell", label = "Yell", desc = "Players yelling in your zone", default = true,
+      events = { "CHAT_MSG_YELL" } },
+    { key = "channel", label = "Channels (Trade, LFG, World...)", desc = "Numbered chat channels, including custom ones", default = true,
+      events = { "CHAT_MSG_CHANNEL" } },
+    { key = "officer", label = "Officer", desc = "Guild officer chat", default = false,
+      events = { "CHAT_MSG_OFFICER" } },
+    { key = "party", label = "Party", desc = "Your party chat", default = false,
+      events = { "CHAT_MSG_PARTY", "CHAT_MSG_PARTY_LEADER" } },
+    { key = "raid", label = "Raid", desc = "Your raid chat", default = false,
+      events = { "CHAT_MSG_RAID", "CHAT_MSG_RAID_LEADER" } },
+    { key = "battleground", label = "Battleground / Instance", desc = "Battleground and instance group chat", default = false,
+      events = { "CHAT_MSG_BATTLEGROUND", "CHAT_MSG_BATTLEGROUND_LEADER", "CHAT_MSG_INSTANCE_CHAT", "CHAT_MSG_INSTANCE_CHAT_LEADER" } },
+    { key = "whisper", label = "Whispers", desc = "Private messages sent to you", default = false,
+      events = { "CHAT_MSG_WHISPER" } },
+}
+local eventSource = {}
+for _, src in ipairs(sources) do
+    for _, ev in ipairs(src.events) do eventSource[ev] = src.key end
+end
+local eventLabel = {
+    CHAT_MSG_GUILD = "Guild", CHAT_MSG_OFFICER = "Officer", CHAT_MSG_SAY = "Say", CHAT_MSG_YELL = "Yell",
+    CHAT_MSG_PARTY = "Party", CHAT_MSG_PARTY_LEADER = "Party", CHAT_MSG_RAID = "Raid", CHAT_MSG_RAID_LEADER = "Raid",
+    CHAT_MSG_BATTLEGROUND = "Battleground", CHAT_MSG_BATTLEGROUND_LEADER = "Battleground",
+    CHAT_MSG_INSTANCE_CHAT = "Instance", CHAT_MSG_INSTANCE_CHAT_LEADER = "Instance",
+    CHAT_MSG_WHISPER = "Whisper",
+}
+local function EnsureSources(t)
+    t.sources = t.sources or {}
+    for _, src in ipairs(sources) do
+        if t.sources[src.key] == nil then t.sources[src.key] = src.default end
+    end
+end
+EnsureSources(settings)
+
 local RefreshUI, ToggleGUI, InitUI
 
 ---------------------------------------------------------------------
 -- GUI
 ---------------------------------------------------------------------
-local FRAME_W, FRAME_H = 440, 500
+local FRAME_W, FRAME_H = 480, 500
 local ACCENT = { 0.36, 0.57, 1.0 }
 local BACKDROP_TEMPLATE = BackdropTemplateMixin and "BackdropTemplate" or nil
 
@@ -51,14 +90,11 @@ StaticPopupDialogs["MCS_CONFIRM_CLEAR"] = {
 }
 
 local function SplitTerms(str)
-    -- Splits "a, b,c" on commas. A single space right after a comma is cosmetic and ignored;
-    -- every other space is kept exactly as typed (so " tank " only matches the whole word).
-    local out, first = {}, true
+    -- Splits on commas. Spaces are kept exactly as typed.
+    local out = {}
     for piece in (str .. ","):gmatch("([^,]*),") do
-        if not first and piece:sub(1, 1) == " " then piece = piece:sub(2) end
-        first = false
-        piece = piece:gsub("|", "")
-        if piece ~= "" then out[#out + 1] = piece end
+        local clean = piece:gsub("|", "")
+        if clean ~= "" then out[#out + 1] = clean end
     end
     return out
 end
@@ -66,8 +102,8 @@ end
 -- Turns the two simple GUI fields into the stored "a|b|-c" format used by the scanner/commands
 local function BuildKeyword(include, exclude)
     local parts = {}
-    for _, t in ipairs(SplitTerms(include)) do
-        t = t:gsub("^%-+", "")
+    for _, term in ipairs(SplitTerms(include)) do
+        local t = term:gsub("^%-+", "")
         if t ~= "" then parts[#parts + 1] = t end
     end
     if #parts == 0 then return nil end
@@ -89,6 +125,26 @@ local function FormatKeyword(v)
         s = s .. "   |cffff6060NOT|r " .. table.concat(exc, ", ")
     end
     return s
+end
+
+-- Turns a stored keyword back into the two GUI fields (for editing)
+local function ParseKeyword(v)
+    local inc, exc = {}, {}
+    for w in v:gmatch("([^|]+)") do
+        if w:sub(1, 1) == "-" then exc[#exc + 1] = w:sub(2) else inc[#inc + 1] = w end
+    end
+    return table.concat(inc, ","), table.concat(exc, ",")
+end
+
+-- Plain-text label for the FOUND alert (no pipe characters, which WoW treats as escape codes)
+local function FoundLabel(v)
+    local inc, exc = {}, {}
+    for w in v:gmatch("([^|]+)") do
+        if w:sub(1, 1) == "-" then exc[#exc + 1] = w:sub(2) else inc[#inc + 1] = w end
+    end
+    local s = table.concat(inc, " + ")
+    if #exc > 0 then s = s .. " NOT " .. table.concat(exc, ", ") end
+    return s:upper():sub(1, 60)
 end
 
 -- Builds a list tab (used for both the keyword list and the ignored players list)
@@ -113,7 +169,6 @@ local function CreateListPanel(parent, cfg)
         pl:SetPoint("LEFT", 2, 0)
         pl:SetText(ph)
         box:SetScript("OnTextChanged", function(self) pl:SetShown(self:GetText() == "") end)
-        box:SetScript("OnEscapePressed", box.ClearFocus)
         return box
     end
     local function MakeLabel(y, text)
@@ -122,21 +177,27 @@ local function CreateListPanel(parent, cfg)
         l:SetText(text)
     end
 
-    local eb, eb2, addBtn, scrollTop
-    addBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-    addBtn:SetSize(80, 22)
+    local eb, eb2, scrollTop
+    local addBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    addBtn:SetSize(70, 22)
     addBtn:SetText("Add")
+    local cancelBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    cancelBtn:SetSize(70, 22)
+    cancelBtn:SetText("Cancel")
+    cancelBtn:SetPoint("LEFT", addBtn, "RIGHT", 4, 0)
+    cancelBtn:Hide()
+
     if cfg.placeholder2 then
         MakeLabel(-50, cfg.label)
-        eb = MakeBox(-66, 380, cfg.placeholder)
+        eb = MakeBox(-66, FRAME_W - 60, cfg.placeholder)
         MakeLabel(-94, cfg.label2)
-        eb2 = MakeBox(-110, 296, cfg.placeholder2)
+        eb2 = MakeBox(-110, 290, cfg.placeholder2)
         addBtn:SetPoint("LEFT", eb2, "RIGHT", 8, 0)
         eb:SetScript("OnTabPressed", function() eb2:SetFocus() end)
         eb2:SetScript("OnTabPressed", function() eb:SetFocus() end)
         scrollTop = -144
     else
-        eb = MakeBox(-56, 296, cfg.placeholder)
+        eb = MakeBox(-56, 290, cfg.placeholder)
         addBtn:SetPoint("LEFT", eb, "RIGHT", 8, 0)
         scrollTop = -90
     end
@@ -168,9 +229,41 @@ local function CreateListPanel(parent, cfg)
 
     local rows = {}
     local ROW_H = 24
+    local editing
+    local Refresh
+    local parse = cfg.parse or function(v) return v, "" end
 
-    local function Refresh()
+    local function SetEditing(i)
+        editing = i
+        addBtn:SetText(i and "Save" or "Add")
+        cancelBtn:SetShown(i ~= nil)
+        if i then
+            local t1, t2 = parse(cfg.get()[i])
+            eb:SetText(t1)
+            if eb2 then eb2:SetText(t2) end
+            eb:SetFocus()
+        else
+            eb:SetText("")
+            if eb2 then eb2:SetText("") end
+        end
+        Refresh()
+    end
+
+    local function OnEscape(self)
+        self:ClearFocus()
+        if editing then SetEditing(nil) end
+    end
+    eb:SetScript("OnEscapePressed", OnEscape)
+    if eb2 then eb2:SetScript("OnEscapePressed", OnEscape) end
+    cancelBtn:SetScript("OnClick", function() SetEditing(nil) end)
+
+    Refresh = function()
         local list = cfg.get()
+        if editing and not list[editing] then
+            editing = nil
+            addBtn:SetText("Add")
+            cancelBtn:Hide()
+        end
         for i = 1, math.max(#list, #rows) do
             local row = rows[i]
             if i <= #list then
@@ -186,20 +279,34 @@ local function CreateListPanel(parent, cfg)
                     row.num:SetJustifyH("LEFT")
                     row.text = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
                     row.text:SetPoint("LEFT", 36, 0)
-                    row.text:SetWidth(FRAME_W - 46 - 36 - 34)
+                    row.text:SetWidth(FRAME_W - 46 - 36 - 76)
                     row.text:SetJustifyH("LEFT")
                     row.text:SetWordWrap(false)
                     row.del = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
                     row.del:SetSize(22, 18)
                     row.del:SetPoint("RIGHT", -6, 0)
                     row.del:SetText("X")
+                    row.edit = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+                    row.edit:SetSize(40, 18)
+                    row.edit:SetPoint("RIGHT", row.del, "LEFT", -4, 0)
+                    row.edit:SetText("Edit")
                     rows[i] = row
                 end
-                row.bg:SetColorTexture(1, 1, 1, i % 2 == 0 and 0.05 or 0.0)
+                if i == editing then
+                    row.bg:SetColorTexture(ACCENT[1], ACCENT[2], ACCENT[3], 0.25)
+                else
+                    row.bg:SetColorTexture(1, 1, 1, i % 2 == 0 and 0.05 or 0.0)
+                end
                 row.num:SetText(i)
                 row.text:SetText(cfg.format and cfg.format(list[i]) or list[i])
+                row.edit:SetScript("OnClick", function() SetEditing(i) end)
                 row.del:SetScript("OnClick", function()
                     table.remove(cfg.get(), i)
+                    if editing == i then
+                        SetEditing(nil)
+                    elseif editing and editing > i then
+                        editing = editing - 1
+                    end
                     RefreshUI()
                 end)
                 row:Show()
@@ -216,9 +323,13 @@ local function CreateListPanel(parent, cfg)
     local function DoAdd()
         local value = cfg.build(eb:GetText() or "", eb2 and eb2:GetText() or "")
         if not value then return end
-        table.insert(cfg.get(), value)
-        eb:SetText("")
-        if eb2 then eb2:SetText("") end
+        local list = cfg.get()
+        if editing and list[editing] then
+            list[editing] = value
+        else
+            table.insert(list, value)
+        end
+        SetEditing(nil)
         RefreshUI()
     end
     addBtn:SetScript("OnClick", DoAdd)
@@ -228,6 +339,7 @@ local function CreateListPanel(parent, cfg)
     clearBtn:SetScript("OnClick", function()
         StaticPopup_Show("MCS_CONFIRM_CLEAR", cfg.confirm, nil, function()
             cfg.clear()
+            SetEditing(nil)
             RefreshUI()
         end)
     end)
@@ -311,6 +423,46 @@ local function CreateSettingsPanel(parent)
     return panel
 end
 
+local function CreateChannelsPanel(parent)
+    local panel = CreateFrame("Frame", nil, parent)
+    panel:SetAllPoints()
+
+    local intro = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    intro:SetPoint("TOPLEFT", 16, -10)
+    intro:SetWidth(FRAME_W - 32)
+    intro:SetJustifyH("LEFT")
+    intro:SetText("Choose which chats the scanner listens to.")
+
+    local y = -34
+    local function Heading(text)
+        local h = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        h:SetPoint("TOPLEFT", 18, y)
+        h:SetText(text)
+        y = y - 22
+    end
+    local function AddSources(wantDefault)
+        for _, src in ipairs(sources) do
+            if src.default == wantDefault then
+                CreateCheckbox(panel, y, src.label, src.desc,
+                    function() return settings.sources[src.key] end,
+                    function(v) settings.sources[src.key] = v end)
+                y = y - 36
+            end
+        end
+    end
+
+    Heading("Scanned by default")
+    AddSources(true)
+    y = y - 6
+    Heading("Other chats (off by default)")
+    AddSources(false)
+
+    panel.Refresh = function()
+        for _, fn in ipairs(settingsRefreshers) do fn() end
+    end
+    return panel
+end
+
 local function SelectTab(index)
     for i, tab in ipairs(tabs) do
         local active = (i == index)
@@ -369,7 +521,7 @@ local function CreateMinimapButton()
     end)
     b:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-        GameTooltip:AddLine("Chat Scanner")
+        GameTooltip:AddLine("Moonscarlet's Chat Scanner")
         GameTooltip:AddLine("Scanning: " .. (settings.enabled and "|cff00ff00ON|r" or "|cffff4040OFF|r"), 1, 1, 1)
         GameTooltip:AddLine("Left-click: open window", 0.7, 0.7, 0.7)
         GameTooltip:AddLine("Right-click: toggle scanning", 0.7, 0.7, 0.7)
@@ -404,7 +556,7 @@ local function CreateMainFrame()
 
     local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 14, -8)
-    title:SetText("Chat Scanner")
+    title:SetText("Moonscarlet's Chat Scanner")
 
     local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", 2, 1)
@@ -418,7 +570,7 @@ local function CreateMainFrame()
     end)
 
     -- tabs
-    local names = { "Keywords", "Ignored Players", "Settings" }
+    local names = { "Keywords", "Ignored Players", "Chats", "Settings" }
     local content = CreateFrame("Frame", nil, f)
     content:SetPoint("TOPLEFT", 0, -64)
     content:SetPoint("BOTTOMRIGHT", 0, 0)
@@ -432,7 +584,7 @@ local function CreateMainFrame()
     local x = 10
     for i, name in ipairs(names) do
         local tab = CreateFrame("Button", nil, f)
-        tab:SetSize(name == "Ignored Players" and 120 or 90, 26)
+        tab:SetSize(name == "Ignored Players" and 120 or 80, 26)
         tab:SetPoint("TOPLEFT", x, -36)
         x = x + tab:GetWidth() + 4
         tab.text = tab:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -458,11 +610,12 @@ local function CreateMainFrame()
         clear = function() whitelistedStringTable = {} end,
         build = BuildKeyword,
         format = FormatKeyword,
-        tip = "Get alerted when chat contains what you type below. Several words separated by commas must ALL appear (e.g. tank, dungeon). Spaces are kept exactly as typed, so \" tank \" only matches the whole word.",
+        parse = ParseKeyword,
+        tip = "Get alerted when chat contains what you type below. Separate words with commas when ALL of them must appear (e.g. tank,dungeon). Spaces count exactly as typed, so \" tank \" only matches the whole word. Use Edit on a row to change it.",
         label = "Message contains:",
-        placeholder = "e.g. LFM Molten Core    or    tank, healer",
+        placeholder = "e.g. LFM Molten Core    or    tank,healer",
         label2 = "...but NOT any of these (optional):",
-        placeholder2 = "e.g. gold, boost",
+        placeholder2 = "e.g. gold,boost",
         empty = "No keywords yet - add one above!",
         single = "keyword", plural = "keywords",
         confirm = "Remove ALL keywords from your watch list?",
@@ -482,7 +635,8 @@ local function CreateMainFrame()
         single = "player", plural = "players",
         confirm = "Remove ALL players from the ignore list?",
     })
-    panels[3] = CreateSettingsPanel(content)
+    panels[3] = CreateChannelsPanel(content)
+    panels[4] = CreateSettingsPanel(content)
 
     SelectTab(1)
 end
@@ -534,6 +688,7 @@ function frameScanner:OnEvent(event, arg1)
             end
         end
         settings = MoonscarletsChatScannerDB
+        EnsureSources(settings)
         InitUI()
     end
 end
@@ -577,7 +732,7 @@ local commands =
         end
         textstr = textstr:gsub("_", " ")
         table.insert(whitelistedStringTable, textstr)
-        print("-- Added: " .. textstr)
+        print("-- Added: " .. FormatKeyword(textstr))
         Refresh()
     end,
 
@@ -587,7 +742,7 @@ local commands =
             print("-- Invalid key number")
             return
         end
-        print("-- Removed " .. key .. ": " .. whitelistedStringTable[key])
+        print("-- Removed " .. key .. ": " .. FormatKeyword(whitelistedStringTable[key]))
         table.remove(whitelistedStringTable, key)
         Refresh()
     end,
@@ -640,7 +795,7 @@ local commands =
             return
         end
         for i, v in ipairs(whitelistedStringTable) do
-            print(i, v)
+            print(i, FormatKeyword(v))
         end
     end,
 
@@ -726,13 +881,17 @@ SlashCmdList.CS = HandleSlashCommands
 -- Chat scanning
 ---------------------------------------------------------------------
 local chatFrameScanner = CreateFrame("FRAME")
-chatFrameScanner:RegisterEvent("CHAT_MSG_GUILD")
-chatFrameScanner:RegisterEvent("CHAT_MSG_CHANNEL")
-chatFrameScanner:RegisterEvent("CHAT_MSG_SAY")
-chatFrameScanner:RegisterEvent("CHAT_MSG_YELL")
+for _, src in ipairs(sources) do
+    for _, ev in ipairs(src.events) do
+        pcall(chatFrameScanner.RegisterEvent, chatFrameScanner, ev) -- skips events this game version doesn't have
+    end
+end
 
 chatFrameScanner:SetScript("OnEvent", function(self, event, message, sender, chanString, chanNumber, chanName, _, _, _, _, _, _, guid)
     if not settings.enabled then return end
+
+    local sourceKey = eventSource[event]
+    if not sourceKey or not settings.sources[sourceKey] then return end
 
     -- 1. Guard against Secret Values (WoW Forever / 12.0+)
     if issecretvalue and (issecretvalue(sender) or issecretvalue(message) or issecretvalue(guid)) then
@@ -836,22 +995,16 @@ chatFrameScanner:SetScript("OnEvent", function(self, event, message, sender, cha
                 local playerLink
                 local coloredPlayerLink
 
-                if event == "CHAT_MSG_GUILD" or event == "CHAT_MSG_SAY" or event == "CHAT_MSG_YELL" then
+                if event ~= "CHAT_MSG_CHANNEL" then
                     playerLink = string.format("|Hplayer:%s|h[%s]|h", sender, player)
                     coloredPlayerLink = string.format("|cff%s%s|r", classColor, playerLink)
 
-                    local chatType = {
-                        CHAT_MSG_GUILD = "Guild",
-                        CHAT_MSG_SAY = "Say",
-                        CHAT_MSG_YELL = "Yell"
-                    }
-
                     msg = string.format("|cAAFF0000FOUND %d (|r|cff92ff58%s|r|cffFF0000):\n|cff5892ff[%s]|r |r%s|cff5892ff: %s|r",
-                        id, v:upper():sub(1, 60), chatType[event] or event, coloredPlayerLink, message)
+                        id, FoundLabel(v), eventLabel[event] or event, coloredPlayerLink, message)
                 else
                     playerLink = "|Hplayer:" .. sender .. "|h" .. (chanName or sender) .. "|h"
                     playerLink = "|cff" .. classColor .. "[" .. playerLink .. "]|r"
-                    msg = "|cAAFF0000FOUND " .. id .. " (|r|cff92ff58" .. v:upper():sub(1, 60) .. "|r|cffFF0000): |r|cff5892ff\n[" .. (chanNumber or "Channel") .. "]|r " .. playerLink .. "|cff5892ff: " .. message .. "|r"
+                    msg = "|cAAFF0000FOUND " .. id .. " (|r|cff92ff58" .. FoundLabel(v) .. "|r|cffFF0000): |r|cff5892ff\n[" .. (chanNumber or "Channel") .. "]|r " .. playerLink .. "|cff5892ff: " .. message .. "|r"
                 end
 
                 DEFAULT_CHAT_FRAME:AddMessage(msg)
