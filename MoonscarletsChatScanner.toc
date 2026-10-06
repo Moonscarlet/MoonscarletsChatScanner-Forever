@@ -1,9 +1,7 @@
-## Interface: 30400
+## Interface: 16001
 ## Title: MoonscarletsChatScanner
 ## Version: 1.1.0
 ## Notes: This is a chat scanner that gives you a notification when the words you add to the watch list are mentioned. You can add exact words, complete sentences or multiple separate words to find.
 ## Author:Moonscarlet
-## SavedVariables: whitelistedStringTable, whitelistedStringTablePlayersChat
-## OptionalDeps: WTFix
-## X-WTFix-Managed: 1
+## SavedVariables: whitelistedStringTable, whitelistedStringTablePlayersChat, MoonscarletsChatScannerDB
 MoonscarletsChatScanner.lua
