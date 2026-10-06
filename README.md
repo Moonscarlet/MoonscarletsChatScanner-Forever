@@ -58,6 +58,8 @@ Type `/cs` or click the minimap button, then:
 Examples: `/cs add dps|scholo`, `/cs add LFM_Molten_Core|-gold`
 
 # Screenshot
+![Screenshot](images/0.png)
+
 ![Screenshot](images/1.png)
 
 ![Screenshot](images/2.png)
