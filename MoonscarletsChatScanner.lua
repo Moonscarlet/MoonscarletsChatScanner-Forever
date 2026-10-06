@@ -20,7 +20,7 @@ local RefreshUI, ToggleGUI, InitUI
 ---------------------------------------------------------------------
 -- GUI
 ---------------------------------------------------------------------
-local FRAME_W, FRAME_H = 440, 480
+local FRAME_W, FRAME_H = 440, 500
 local ACCENT = { 0.36, 0.57, 1.0 }
 local BACKDROP_TEMPLATE = BackdropTemplateMixin and "BackdropTemplate" or nil
 
@@ -50,6 +50,47 @@ StaticPopupDialogs["MCS_CONFIRM_CLEAR"] = {
     preferredIndex = 3,
 }
 
+local function SplitTerms(str)
+    -- Splits "a, b,c" on commas. A single space right after a comma is cosmetic and ignored;
+    -- every other space is kept exactly as typed (so " tank " only matches the whole word).
+    local out, first = {}, true
+    for piece in (str .. ","):gmatch("([^,]*),") do
+        if not first and piece:sub(1, 1) == " " then piece = piece:sub(2) end
+        first = false
+        piece = piece:gsub("|", "")
+        if piece ~= "" then out[#out + 1] = piece end
+    end
+    return out
+end
+
+-- Turns the two simple GUI fields into the stored "a|b|-c" format used by the scanner/commands
+local function BuildKeyword(include, exclude)
+    local parts = {}
+    for _, t in ipairs(SplitTerms(include)) do
+        t = t:gsub("^%-+", "")
+        if t ~= "" then parts[#parts + 1] = t end
+    end
+    if #parts == 0 then return nil end
+    for _, t in ipairs(SplitTerms(exclude)) do
+        parts[#parts + 1] = "-" .. t
+    end
+    return table.concat(parts, "|")
+end
+
+-- Shows a stored keyword in a friendly way (quotes make spaces visible)
+local function FormatKeyword(v)
+    local inc, exc = {}, {}
+    for w in v:gmatch("([^|]+)") do
+        if w:sub(1, 1) == "-" then exc[#exc + 1] = '"' .. w:sub(2) .. '"'
+        else inc[#inc + 1] = '"' .. w .. '"' end
+    end
+    local s = table.concat(inc, " |cff888888+|r ")
+    if #exc > 0 then
+        s = s .. "   |cffff6060NOT|r " .. table.concat(exc, ", ")
+    end
+    return s
+end
+
 -- Builds a list tab (used for both the keyword list and the ignored players list)
 local function CreateListPanel(parent, cfg)
     local panel = CreateFrame("Frame", nil, parent)
@@ -62,27 +103,46 @@ local function CreateListPanel(parent, cfg)
     tip:SetSpacing(2)
     tip:SetText(cfg.tip)
 
-    local eb = CreateFrame("EditBox", nil, panel, "InputBoxTemplate")
-    eb:SetPoint("TOPLEFT", 22, -56)
-    eb:SetSize(296, 22)
-    eb:SetAutoFocus(false)
-    eb:SetMaxLetters(100)
+    local function MakeBox(y, width, ph)
+        local box = CreateFrame("EditBox", nil, panel, "InputBoxTemplate")
+        box:SetPoint("TOPLEFT", 22, y)
+        box:SetSize(width, 22)
+        box:SetAutoFocus(false)
+        box:SetMaxLetters(100)
+        local pl = box:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        pl:SetPoint("LEFT", 2, 0)
+        pl:SetText(ph)
+        box:SetScript("OnTextChanged", function(self) pl:SetShown(self:GetText() == "") end)
+        box:SetScript("OnEscapePressed", box.ClearFocus)
+        return box
+    end
+    local function MakeLabel(y, text)
+        local l = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        l:SetPoint("TOPLEFT", 22, y)
+        l:SetText(text)
+    end
 
-    local placeholder = eb:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    placeholder:SetPoint("LEFT", 2, 0)
-    placeholder:SetText(cfg.placeholder)
-    eb:SetScript("OnTextChanged", function(self)
-        placeholder:SetShown(self:GetText() == "")
-    end)
-    eb:SetScript("OnEscapePressed", eb.ClearFocus)
-
-    local addBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    local eb, eb2, addBtn, scrollTop
+    addBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     addBtn:SetSize(80, 22)
-    addBtn:SetPoint("LEFT", eb, "RIGHT", 8, 0)
     addBtn:SetText("Add")
+    if cfg.placeholder2 then
+        MakeLabel(-50, cfg.label)
+        eb = MakeBox(-66, 380, cfg.placeholder)
+        MakeLabel(-94, cfg.label2)
+        eb2 = MakeBox(-110, 296, cfg.placeholder2)
+        addBtn:SetPoint("LEFT", eb2, "RIGHT", 8, 0)
+        eb:SetScript("OnTabPressed", function() eb2:SetFocus() end)
+        eb2:SetScript("OnTabPressed", function() eb:SetFocus() end)
+        scrollTop = -144
+    else
+        eb = MakeBox(-56, 296, cfg.placeholder)
+        addBtn:SetPoint("LEFT", eb, "RIGHT", 8, 0)
+        scrollTop = -90
+    end
 
     local scroll = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", 14, -90)
+    scroll:SetPoint("TOPLEFT", 14, scrollTop)
     scroll:SetPoint("BOTTOMRIGHT", -32, 44)
     local listBg = CreateFrame("Frame", nil, panel, BACKDROP_TEMPLATE)
     listBg:SetPoint("TOPLEFT", scroll, -4, 4)
@@ -137,7 +197,7 @@ local function CreateListPanel(parent, cfg)
                 end
                 row.bg:SetColorTexture(1, 1, 1, i % 2 == 0 and 0.05 or 0.0)
                 row.num:SetText(i)
-                row.text:SetText(list[i])
+                row.text:SetText(cfg.format and cfg.format(list[i]) or list[i])
                 row.del:SetScript("OnClick", function()
                     table.remove(cfg.get(), i)
                     RefreshUI()
@@ -154,16 +214,16 @@ local function CreateListPanel(parent, cfg)
     end
 
     local function DoAdd()
-        local text = strtrim(eb:GetText() or "")
-        if text == "" then return end
-        if cfg.transform then text = cfg.transform(text) end
-        if text == "" then return end
-        table.insert(cfg.get(), text)
+        local value = cfg.build(eb:GetText() or "", eb2 and eb2:GetText() or "")
+        if not value then return end
+        table.insert(cfg.get(), value)
         eb:SetText("")
+        if eb2 then eb2:SetText("") end
         RefreshUI()
     end
     addBtn:SetScript("OnClick", DoAdd)
     eb:SetScript("OnEnterPressed", DoAdd)
+    if eb2 then eb2:SetScript("OnEnterPressed", DoAdd) end
 
     clearBtn:SetScript("OnClick", function()
         StaticPopup_Show("MCS_CONFIRM_CLEAR", cfg.confirm, nil, function()
@@ -396,8 +456,13 @@ local function CreateMainFrame()
     panels[1] = CreateListPanel(content, {
         get = function() return whitelistedStringTable end,
         clear = function() whitelistedStringTable = {} end,
-        tip = "Type words or phrases to watch for in Guild, Say, Yell and channel chat (Trade, LFG, World...). Use |cff92ff58|||r between words when ALL must appear (e.g. |cff92ff58dps|scholo|r) and put |cff92ff58-|r in front of a word to exclude it (e.g. |cff92ff58LFM Molten Core|-gold|r).",
-        placeholder = "e.g. LFM Molten Core",
+        build = BuildKeyword,
+        format = FormatKeyword,
+        tip = "Get alerted when chat contains what you type below. Several words separated by commas must ALL appear (e.g. tank, dungeon). Spaces are kept exactly as typed, so \" tank \" only matches the whole word.",
+        label = "Message contains:",
+        placeholder = "e.g. LFM Molten Core    or    tank, healer",
+        label2 = "...but NOT any of these (optional):",
+        placeholder2 = "e.g. gold, boost",
         empty = "No keywords yet - add one above!",
         single = "keyword", plural = "keywords",
         confirm = "Remove ALL keywords from your watch list?",
@@ -405,7 +470,12 @@ local function CreateMainFrame()
     panels[2] = CreateListPanel(content, {
         get = function() return whitelistedStringTablePlayersChat end,
         clear = function() whitelistedStringTablePlayersChat = {} end,
-        transform = function(t) return (t:gsub("-.*", "")) end,
+        build = function(t)
+            t = strtrim(t)
+            t = t:gsub("-.*", "")
+            if t == "" then return nil end
+            return t
+        end,
         tip = "Players on this list are ignored by the scanner - handy for spammers who keep matching your keywords. This does not affect the normal in-game ignore list.",
         placeholder = "Player name",
         empty = "Nobody is ignored. Nice!",
