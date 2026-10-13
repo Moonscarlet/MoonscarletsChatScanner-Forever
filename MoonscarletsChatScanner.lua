@@ -12,6 +12,7 @@ local defaults = {
     raidWarning = false,
     sound = 4041,
     color = "5892ff",
+    chatFrame = 1,
     minimap = true,
     minimapAngle = 215,
 }
@@ -105,12 +106,21 @@ local function ShowRaidWarning(text, r, g, b)
     end
 end
 
+-- The chat tab alerts are printed in, and its window index. Uses the first tab if the chosen one was closed.
+local function AlertChatFrame()
+    local i = settings.chatFrame
+    if i ~= 1 and FCF_IsChatWindowIndexActive(i) then
+        return _G["ChatFrame" .. i], i
+    end
+    return DEFAULT_CHAT_FRAME, 1
+end
+
 -- Fires every enabled alert for one match. who is the (already colored) player link.
 local function Notify(id, label, source, who, message)
     local hex = settings.color
     local body = "|cff" .. hex .. "[" .. source .. "]|r " .. who .. "|cff" .. hex .. ": " .. message .. "|r"
 
-    DEFAULT_CHAT_FRAME:AddMessage("|cAAFF0000FOUND " .. id .. " (|r|cff92ff58" .. label .. "|r|cffFF0000):|r\n" .. body)
+    AlertChatFrame():AddMessage("|cAAFF0000FOUND " .. id .. " (|r|cff92ff58" .. label .. "|r|cffFF0000):|r\n" .. body)
 
     if not settings.mute then
         PlayAlertSound()
@@ -437,26 +447,53 @@ local function CreateCheckbox(parent, y, label, desc, get, set)
     return cb
 end
 
--- Sits on the right of the "Play a sound" checkbox row
-local function CreateSoundDropdown(parent, y)
+-- A dropdown on the right side of a settings row. generator(dropdown, root) fills the menu each time it opens.
+local function CreateDropdown(parent, y, generator)
     local dd = CreateFrame("DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
     dd:SetPoint("TOPRIGHT", -16, y - 1)
     dd:SetWidth(170)
-    dd:SetDefaultText("Custom")
+    dd:SetupMenu(generator)
+    return dd
+end
+
+-- Sits on the "Play a sound" checkbox row
+local function CreateSoundDropdown(parent, y)
     local function IsSelected(id) return settings.sound == id end
     local function SetSelected(id)
         settings.sound = id
         PlayAlertSound()
         return MenuResponse.Refresh -- keeps the list open so sounds can be compared
     end
-    dd:SetupMenu(function(_, root)
+    local dd = CreateDropdown(parent, y, function(_, root)
         for _, s in ipairs(sounds) do
             local name = s.id == defaults.sound and s.name .. " (default)" or s.name
             root:CreateRadio(name, IsSelected, SetSelected, s.id)
         end
     end)
+    dd:SetDefaultText("Custom")
     table.insert(settingsRefreshers, function() dd:SetEnabled(not settings.mute) end)
     return dd
+end
+
+-- A row of its own: label and description on the left, the list of open chat tabs on the right
+local function CreateChatTabDropdown(parent, y)
+    local t = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    t:SetPoint("LEFT", parent, "TOPLEFT", 46, y - 12)
+    t:SetText("Show alerts in this chat tab")
+    local d = parent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    d:SetPoint("TOPLEFT", 46, y - 23)
+    d:SetText("If that tab gets closed, the first tab is used.")
+
+    local function IsSelected(i) return select(2, AlertChatFrame()) == i end
+    local function SetSelected(i) settings.chatFrame = i end
+    return CreateDropdown(parent, y, function(_, root)
+        FCF_IterateActiveChatWindows(function(frame, i)
+            -- the combat log wipes its own contents when it refilters, so alerts would get lost there
+            if not IsCombatLog(frame) then
+                root:CreateRadio((FCF_GetChatWindowInfo(i)), IsSelected, SetSelected, i)
+            end
+        end)
+    end)
 end
 
 -- Laid out like CreateCheckbox, with a clickable color swatch where the checkbox would be
@@ -515,32 +552,34 @@ local function CreateSettingsPanel(parent)
         function() return settings.enabled end,
         function(v) settings.enabled = v end)
 
-    CreateCheckbox(panel, -66, "Play a sound when a match is found",
+    CreateCheckbox(panel, -60, "Play a sound when a match is found",
         "Uncheck for silent chat alerts only.",
         function() return not settings.mute end,
         function(v) settings.mute = not v end)
-    CreateSoundDropdown(panel, -66)
+    CreateSoundDropdown(panel, -60)
 
-    CreateCheckbox(panel, -116, "Play sound even if game sound is muted",
+    CreateCheckbox(panel, -104, "Play sound even if game sound is muted",
         "Uses the Master volume channel so you never miss an alert.",
         function() return settings.master end,
         function(v) settings.master = v end)
 
-    CreateCheckbox(panel, -166, "Show a raid warning style alert",
+    CreateCheckbox(panel, -148, "Show a raid warning style alert",
         "Also shows the match as big text in the middle of your screen.",
         function() return settings.raidWarning end,
         function(v) settings.raidWarning = v end)
 
-    CreateCheckbox(panel, -216, "Flash the WoW icon in the taskbar",
+    CreateCheckbox(panel, -192, "Flash the WoW icon in the taskbar",
         "Helpful when the game is minimized or in the background.",
         function() return settings.flash end,
         function(v) settings.flash = v end)
 
-    CreateColorSwatch(panel, -266, "Alert text color",
+    CreateChatTabDropdown(panel, -236)
+
+    CreateColorSwatch(panel, -280, "Alert text color",
         "Click the swatch to change the color of matched messages.",
         "color")
 
-    CreateCheckbox(panel, -316, "Show minimap button",
+    CreateCheckbox(panel, -324, "Show minimap button",
         "Left-click opens this window, right-click toggles scanning.",
         function() return settings.minimap end,
         function(v)
@@ -550,7 +589,7 @@ local function CreateSettingsPanel(parent)
 
     local test = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     test:SetSize(140, 24)
-    test:SetPoint("TOPLEFT", 20, -376)
+    test:SetPoint("TOPLEFT", 20, -380)
     test:SetText("Test notification")
     test:SetScript("OnClick", function()
         Notify(1, "TEST", "Test", "|cffffffff[Someone]|r", "This is what a match looks like!")

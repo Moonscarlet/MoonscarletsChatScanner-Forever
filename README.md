@@ -17,7 +17,7 @@ A World of Warcraft addon that watches chat for the words you care about and ale
 - Per-player ignore list (separate from the game's own ignore list)
 - Sound alert with a choice of sounds (optional "play even if muted") and taskbar flash
 - Optional raid warning style alert in the middle of the screen
-- Pick the color of the alert text
+- Pick the color of the alert text and which chat tab it is printed in
 - Clickable, class-colored player names in alerts
 - Skips your own messages and duplicate messages
 - Settings and lists are saved between sessions
