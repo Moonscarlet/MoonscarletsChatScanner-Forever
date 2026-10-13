@@ -15,7 +15,9 @@ A World of Warcraft addon that watches chat for the words you care about and ale
   - **On by default:** Guild, Say, Yell, Channels
   - **Off by default:** Officer, Party, Raid, Battleground / Instance, Whispers
 - Per-player ignore list (separate from the game's own ignore list)
-- Sound alert (optional "play even if muted") and taskbar flash
+- Sound alert with a choice of sounds (optional "play even if muted") and taskbar flash
+- Optional raid warning style alert in the middle of the screen
+- Pick the color of the alert text
 - Clickable, class-colored player names in alerts
 - Skips your own messages and duplicate messages
 - Settings and lists are saved between sessions

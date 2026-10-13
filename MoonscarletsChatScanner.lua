@@ -9,6 +9,9 @@ local defaults = {
     mute = false,
     master = false,
     flash = false,
+    raidWarning = false,
+    sound = 4041,
+    color = "5892ff",
     minimap = true,
     minimapAngle = 215,
 }
@@ -54,12 +57,80 @@ local function EnsureSources(t)
 end
 EnsureSources(settings)
 
+---------------------------------------------------------------------
+-- Alerts
+---------------------------------------------------------------------
+-- Sounds offered in the Settings tab. Ids are SoundKit ids (wowhead.com/classic/sound=ID).
+local sounds = {
+    { id = 4041, name = "Cat" },
+    { id = 8959, name = "Raid Warning" },
+    { id = 8960, name = "Ready Check" },
+    { id = 3081, name = "Whisper" },
+    { id = 3175, name = "Map Ping" },
+    { id = 5274, name = "Auction House" },
+    { id = 878, name = "Quest Complete" },
+    { id = 8459, name = "PvP Queue Ready" },
+    { id = 12867, name = "Alarm Clock" },
+    { id = 12197, name = "Boss Warning" },
+    { id = 8474, name = "Screech" },
+    { id = 6555, name = "Bell" },
+    { id = 1431, name = "Lay on Hands" },
+    { id = 1023, name = "Chicken" },
+    { id = 1044, name = "Centaur" },
+    { id = 3410, name = "Orca" },
+    { id = 416, name = "Murloc" },
+}
+
+-- The alert color is stored as "rrggbb" so it can go straight into a |cff color code
+local function HexToRGB(hex)
+    return tonumber(hex:sub(1, 2), 16) / 255, tonumber(hex:sub(3, 4), 16) / 255, tonumber(hex:sub(5, 6), 16) / 255
+end
+
+local function RGBToHex(r, g, b)
+    local function byte(v) return math.floor(math.min(math.max(v, 0), 1) * 255 + 0.5) end
+    return string.format("%02x%02x%02x", byte(r), byte(g), byte(b))
+end
+
+local function PlayAlertSound()
+    if settings.master then PlaySound(settings.sound, "Master") else PlaySound(settings.sound) end
+end
+
+-- Big text in the middle of the screen. RaidNotice_AddMessage is the older name for the same thing.
+local function ShowRaidWarning(text, r, g, b)
+    local color = { r = r, g = g, b = b }
+    if RaidWarningUtil and RaidWarningUtil.AddMessage then
+        RaidWarningUtil.AddMessage(text, color)
+    elseif RaidNotice_AddMessage and RaidWarningFrame then
+        RaidNotice_AddMessage(RaidWarningFrame, text, color)
+    end
+end
+
+-- Fires every enabled alert for one match. who is the (already colored) player link.
+local function Notify(id, label, source, who, message)
+    local hex = settings.color
+    local body = "|cff" .. hex .. "[" .. source .. "]|r " .. who .. "|cff" .. hex .. ": " .. message .. "|r"
+
+    DEFAULT_CHAT_FRAME:AddMessage("|cAAFF0000FOUND " .. id .. " (|r|cff92ff58" .. label .. "|r|cffFF0000):|r\n" .. body)
+
+    if not settings.mute then
+        PlayAlertSound()
+    end
+
+    if settings.raidWarning then
+        ShowRaidWarning(body, HexToRGB(hex))
+    end
+
+    if settings.flash and FlashClientIcon then
+        FlashClientIcon()
+    end
+end
+
 local RefreshUI, ToggleGUI, InitUI
 
 ---------------------------------------------------------------------
 -- GUI
 ---------------------------------------------------------------------
-local FRAME_W, FRAME_H = 480, 500
+local FRAME_W, FRAME_H = 480, 540
 local ACCENT = { 0.36, 0.57, 1.0 }
 local BACKDROP_TEMPLATE = BackdropTemplateMixin and "BackdropTemplate" or nil
 
@@ -366,6 +437,75 @@ local function CreateCheckbox(parent, y, label, desc, get, set)
     return cb
 end
 
+-- Sits on the right of the "Play a sound" checkbox row
+local function CreateSoundDropdown(parent, y)
+    local dd = CreateFrame("DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
+    dd:SetPoint("TOPRIGHT", -16, y - 1)
+    dd:SetWidth(170)
+    dd:SetDefaultText("Custom")
+    local function IsSelected(id) return settings.sound == id end
+    local function SetSelected(id)
+        settings.sound = id
+        PlayAlertSound()
+        return MenuResponse.Refresh -- keeps the list open so sounds can be compared
+    end
+    dd:SetupMenu(function(_, root)
+        for _, s in ipairs(sounds) do
+            local name = s.id == defaults.sound and s.name .. " (default)" or s.name
+            root:CreateRadio(name, IsSelected, SetSelected, s.id)
+        end
+    end)
+    table.insert(settingsRefreshers, function() dd:SetEnabled(not settings.mute) end)
+    return dd
+end
+
+-- Laid out like CreateCheckbox, with a clickable color swatch where the checkbox would be
+local function CreateColorSwatch(parent, y, label, desc, key)
+    local sw = CreateFrame("Button", nil, parent)
+    sw:SetPoint("TOPLEFT", 21, y - 5)
+    sw:SetSize(16, 16)
+    sw:SetHitRectInsets(-5, -5, -5, -5)
+    local border = sw:CreateTexture(nil, "BACKGROUND")
+    border:SetPoint("TOPLEFT", -1, 1)
+    border:SetPoint("BOTTOMRIGHT", 1, -1)
+    border:SetColorTexture(0.6, 0.6, 0.65, 1)
+    local color = sw:CreateTexture(nil, "ARTWORK")
+    color:SetAllPoints()
+    local t = sw:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    t:SetPoint("LEFT", sw, "RIGHT", 9, 1)
+    t:SetText(label)
+    local d = sw:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    d:SetPoint("TOPLEFT", sw, "BOTTOMLEFT", 25, -2)
+    d:SetText(desc)
+
+    local reset = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+    reset:SetSize(60, 20)
+    reset:SetPoint("TOPRIGHT", -16, y - 3)
+    reset:SetText("Reset")
+
+    local function Update()
+        color:SetColorTexture(HexToRGB(settings[key]))
+        reset:SetEnabled(settings[key] ~= defaults[key])
+    end
+    local function Set(hex)
+        settings[key] = hex
+        Update()
+    end
+    sw:SetScript("OnClick", function()
+        local old = settings[key]
+        local r, g, b = HexToRGB(old)
+        ColorPickerFrame:SetupColorPickerAndShow({
+            r = r, g = g, b = b,
+            hasOpacity = false,
+            swatchFunc = function() Set(RGBToHex(ColorPickerFrame:GetColorRGB())) end,
+            cancelFunc = function() Set(old) end,
+        })
+    end)
+    reset:SetScript("OnClick", function() Set(defaults[key]) end)
+    table.insert(settingsRefreshers, Update)
+    return sw
+end
+
 local function CreateSettingsPanel(parent)
     local panel = CreateFrame("Frame", nil, parent)
     panel:SetAllPoints()
@@ -379,18 +519,28 @@ local function CreateSettingsPanel(parent)
         "Uncheck for silent chat alerts only.",
         function() return not settings.mute end,
         function(v) settings.mute = not v end)
+    CreateSoundDropdown(panel, -66)
 
     CreateCheckbox(panel, -116, "Play sound even if game sound is muted",
         "Uses the Master volume channel so you never miss an alert.",
         function() return settings.master end,
         function(v) settings.master = v end)
 
-    CreateCheckbox(panel, -166, "Flash the WoW icon in the taskbar",
+    CreateCheckbox(panel, -166, "Show a raid warning style alert",
+        "Also shows the match as big text in the middle of your screen.",
+        function() return settings.raidWarning end,
+        function(v) settings.raidWarning = v end)
+
+    CreateCheckbox(panel, -216, "Flash the WoW icon in the taskbar",
         "Helpful when the game is minimized or in the background.",
         function() return settings.flash end,
         function(v) settings.flash = v end)
 
-    CreateCheckbox(panel, -216, "Show minimap button",
+    CreateColorSwatch(panel, -266, "Alert text color",
+        "Click the swatch to change the color of matched messages.",
+        "color")
+
+    CreateCheckbox(panel, -316, "Show minimap button",
         "Left-click opens this window, right-click toggles scanning.",
         function() return settings.minimap end,
         function(v)
@@ -400,14 +550,10 @@ local function CreateSettingsPanel(parent)
 
     local test = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     test:SetSize(140, 24)
-    test:SetPoint("TOPLEFT", 20, -276)
+    test:SetPoint("TOPLEFT", 20, -376)
     test:SetText("Test notification")
     test:SetScript("OnClick", function()
-        DEFAULT_CHAT_FRAME:AddMessage("|cAAFF0000FOUND 1 (|r|cff92ff58TEST|r|cffFF0000): |r|cff5892ff\n[Test]|r |cffffffff[Someone]|r|cff5892ff: This is what a match looks like!|r")
-        if not settings.mute then
-            if settings.master then PlaySound(4041, "Master") else PlaySound(4041) end
-        end
-        if settings.flash and FlashClientIcon then FlashClientIcon() end
+        Notify(1, "TEST", "Test", "|cffffffff[Someone]|r", "This is what a match looks like!")
     end)
 
     local tipText = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
@@ -991,35 +1137,21 @@ chatFrameScanner:SetScript("OnEvent", function(self, event, message, sender, cha
                     messageCheckDuplicate = message
                 end
 
-                local msg
+                local source
                 local playerLink
                 local coloredPlayerLink
 
                 if event ~= "CHAT_MSG_CHANNEL" then
+                    source = eventLabel[event] or event
                     playerLink = string.format("|Hplayer:%s|h[%s]|h", sender, player)
                     coloredPlayerLink = string.format("|cff%s%s|r", classColor, playerLink)
-
-                    msg = string.format("|cAAFF0000FOUND %d (|r|cff92ff58%s|r|cffFF0000):\n|cff5892ff[%s]|r |r%s|cff5892ff: %s|r",
-                        id, FoundLabel(v), eventLabel[event] or event, coloredPlayerLink, message)
                 else
+                    source = chanNumber or "Channel"
                     playerLink = "|Hplayer:" .. sender .. "|h" .. (chanName or sender) .. "|h"
-                    playerLink = "|cff" .. classColor .. "[" .. playerLink .. "]|r"
-                    msg = "|cAAFF0000FOUND " .. id .. " (|r|cff92ff58" .. FoundLabel(v) .. "|r|cffFF0000): |r|cff5892ff\n[" .. (chanNumber or "Channel") .. "]|r " .. playerLink .. "|cff5892ff: " .. message .. "|r"
+                    coloredPlayerLink = "|cff" .. classColor .. "[" .. playerLink .. "]|r"
                 end
 
-                DEFAULT_CHAT_FRAME:AddMessage(msg)
-
-                if not settings.mute then
-                    if settings.master then
-                        PlaySound(4041, "Master")
-                    else
-                        PlaySound(4041)
-                    end
-                end
-
-                if settings.flash and FlashClientIcon then
-                    FlashClientIcon()
-                end
+                Notify(id, FoundLabel(v), source, coloredPlayerLink, message)
 
                 return
             end
