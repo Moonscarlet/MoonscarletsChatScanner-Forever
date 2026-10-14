@@ -15,9 +15,11 @@ A World of Warcraft addon that watches chat for the words you care about and ale
   - **On by default:** Guild, Say, Yell, Channels
   - **Off by default:** Officer, Party, Raid, Battleground / Instance, Whispers
 - Per-player ignore list (separate from the game's own ignore list)
-- Sound alert with a choice of sounds (optional "play even if muted") and taskbar flash
-- Optional raid warning style alert in the middle of the screen
-- Pick the color of the alert text and which chat tab it is printed in
+- Choose the alert sound from a list (Cat by default), with an optional "play even if game sound is muted"
+- Choose the color of the alert text (the original blue by default)
+- Send alerts to any of your chat tabs (the first tab by default)
+- Optional raid warning style alert: big text in the middle of the screen (off by default)
+- Optional taskbar flash when the game is in the background
 - Clickable, class-colored player names in alerts
 - Skips your own messages and duplicate messages
 - Settings and lists are saved between sessions
@@ -35,6 +37,22 @@ Type `/cs` or click the minimap button, then:
 1. Open the **Keywords** tab, type what you're looking for and press Enter.
 2. Optionally fill in "...but NOT any of these" to skip unwanted messages.
 3. Use the **Chats** tab to choose where to listen.
+4. Use the **Settings** tab to choose how you're alerted.
+
+### Alert settings
+
+All of these are on the **Settings** tab:
+
+| Setting | Default | What it does |
+|---|---|---|
+| Sound | Cat | Pick from the list next to "Play a sound". Each sound plays when you pick it so you can compare them. |
+| Play sound even if game sound is muted | Off | Uses the Master volume channel. |
+| Raid warning style alert | Off | Also shows the match as big text in the middle of your screen. |
+| Show alerts in this chat tab | First tab | Prints the alert in the chat tab you pick. If that tab gets closed, the first tab is used. The Combat Log can't be picked. |
+| Alert text color | Blue | Click the swatch to pick a color; **Reset** brings back the default. |
+| Flash the WoW icon in the taskbar | Off | Helpful when the game is minimized or in the background. |
+
+Use **Test notification** to preview your alert settings.
 
 ### Keyword rules
 

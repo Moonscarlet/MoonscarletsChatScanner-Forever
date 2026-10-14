@@ -11,7 +11,11 @@ I keep Trade, LFG and World in a separate chat tab, so my main tab stays clean. 
 - **Edit anytime.** Change a keyword in place with one click.
 - **Choose your chats.** Guild, Say, Yell and channels are on by default. Party, Raid, Battleground, Officer and Whispers are optional.
 - **Ignore list.** Silence spammers in the scanner without touching your normal ignore list.
-- **Alerts your way.** Pick the alert sound (it can play even if game sound is muted) and the color of the alert text, and choose which chat tab alerts are printed in. Optional raid warning style alert in the middle of your screen, and an optional taskbar flash when the game is in the background.
+- **Pick your sound.** Choose the alert sound from a list and hear each one as you pick it. It can play even if game sound is muted.
+- **Pick your color.** Choose the color of the alert text, with a Reset button to get the default blue back.
+- **Pick your chat tab.** Send alerts to any of your chat tabs, not just the first one.
+- **Raid warning style alert (optional).** Also show the match as big text in the middle of your screen.
+- **Taskbar flash (optional)** when the game is in the background.
 - **Class-colored, clickable player names** in every alert.
 - Your own messages and repeated messages are skipped, and everything is saved between sessions.
 
@@ -19,6 +23,7 @@ I keep Trade, LFG and World in a separate chat tab, so my main tab stays clean. 
 1. Type `/cs` (or click the minimap button).
 2. On the **Keywords** tab, type what you're looking for and press Enter.
 3. Check the **Chats** tab to choose where to listen.
+4. Open the **Settings** tab to choose your sound, color, chat tab and alert style, then click **Test notification** to try it.
 
 ## Keywords
 | You type | It matches |
