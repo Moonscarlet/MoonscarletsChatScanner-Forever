@@ -67,6 +67,8 @@ Use **Test notification** to preview your alert settings.
 | `/cs` | Open or close the window |
 | `/cs add [text]` | Add a keyword (`_` = space, `\|` = must match all, `-` = exclude) |
 | `/cs del [number]` | Remove a keyword |
+| `/cs toggle [number] [number] ...` | Turn keywords on/off (e.g. `/cs toggle 1 2 3`) |
+| `/cs edit [number] [String]` | Replace a keyword (same format as add) |
 | `/cs clear` | Clear all keywords |
 | `/cs list` | Print keywords and settings |
 | `/cs addplayer [name]` | Ignore a player |

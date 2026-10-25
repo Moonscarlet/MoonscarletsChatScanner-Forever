@@ -40,6 +40,8 @@ Spaces count exactly as typed, so `" tank "` only matches the whole word "tank" 
 | `/cs` | Open or close the window |
 | `/cs add [text]` | Add a keyword (`_` = space, `\|` = all must match, `-` = exclude) |
 | `/cs del [number]` | Remove a keyword |
+| `/cs toggle [number] [number] ...` | Turn keywords on/off (e.g. `/cs toggle 1 2 3`) |
+| `/cs edit [number] [String]` | Replace a keyword (same format as add) |
 | `/cs list` | Show your keywords and settings |
 | `/cs clear` | Clear all keywords |
 | `/cs addplayer [name]` | Ignore a player |

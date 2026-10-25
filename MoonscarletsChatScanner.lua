@@ -180,11 +180,18 @@ local function SplitTerms(str)
     return out
 end
 
+-- A disabled keyword is stored with a leading "~"
+local function IsOff(v) return v:sub(1, 1) == "~" end
+local function SetOff(v, off)
+    local base = (v:gsub("^~+", ""))
+    return off and ("~" .. base) or base
+end
+
 -- Turns the two simple GUI fields into the stored "a|b|-c" format used by the scanner/commands
 local function BuildKeyword(include, exclude)
     local parts = {}
     for _, term in ipairs(SplitTerms(include)) do
-        local t = term:gsub("^%-+", "")
+        local t = term:gsub("^[%-~]+", "")
         if t ~= "" then parts[#parts + 1] = t end
     end
     if #parts == 0 then return nil end
@@ -194,12 +201,19 @@ local function BuildKeyword(include, exclude)
     return table.concat(parts, "|")
 end
 
--- Shows a stored keyword in a friendly way (quotes make spaces visible)
+-- Shows a stored keyword in a friendly way (quotes make spaces visible). Disabled ones are greyed out.
 local function FormatKeyword(v)
+    local off = IsOff(v)
+    v = v:gsub("^~+", "")
     local inc, exc = {}, {}
     for w in v:gmatch("([^|]+)") do
         if w:sub(1, 1) == "-" then exc[#exc + 1] = '"' .. w:sub(2) .. '"'
         else inc[#inc + 1] = '"' .. w .. '"' end
+    end
+    if off then
+        local s = table.concat(inc, " + ")
+        if #exc > 0 then s = s .. "   NOT " .. table.concat(exc, ", ") end
+        return "|cff666666" .. s .. "  (off)|r"
     end
     local s = table.concat(inc, " |cff888888+|r ")
     if #exc > 0 then
@@ -210,6 +224,7 @@ end
 
 -- Turns a stored keyword back into the two GUI fields (for editing)
 local function ParseKeyword(v)
+    v = v:gsub("^~+", "")
     local inc, exc = {}, {}
     for w in v:gmatch("([^|]+)") do
         if w:sub(1, 1) == "-" then exc[#exc + 1] = w:sub(2) else inc[#inc + 1] = w end
@@ -360,7 +375,7 @@ local function CreateListPanel(parent, cfg)
                     row.num:SetJustifyH("LEFT")
                     row.text = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
                     row.text:SetPoint("LEFT", 36, 0)
-                    row.text:SetWidth(FRAME_W - 46 - 36 - 76)
+                    row.text:SetWidth(FRAME_W - 46 - 36 - (cfg.isOff and 116 or 76))
                     row.text:SetJustifyH("LEFT")
                     row.text:SetWordWrap(false)
                     row.del = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
@@ -371,6 +386,11 @@ local function CreateListPanel(parent, cfg)
                     row.edit:SetSize(40, 18)
                     row.edit:SetPoint("RIGHT", row.del, "LEFT", -4, 0)
                     row.edit:SetText("Edit")
+                    if cfg.isOff then
+                        row.toggle = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+                        row.toggle:SetSize(36, 18)
+                        row.toggle:SetPoint("RIGHT", row.edit, "LEFT", -4, 0)
+                    end
                     rows[i] = row
                 end
                 if i == editing then
@@ -380,6 +400,14 @@ local function CreateListPanel(parent, cfg)
                 end
                 row.num:SetText(i)
                 row.text:SetText(cfg.format and cfg.format(list[i]) or list[i])
+                if row.toggle then
+                    row.toggle:SetText(cfg.isOff(list[i]) and "|cffff6060Off|r" or "|cff40ff40On|r")
+                    row.toggle:SetScript("OnClick", function()
+                        local l = cfg.get()
+                        l[i] = cfg.setOff(l[i], not cfg.isOff(l[i]))
+                        RefreshUI()
+                    end)
+                end
                 row.edit:SetScript("OnClick", function() SetEditing(i) end)
                 row.del:SetScript("OnClick", function()
                     table.remove(cfg.get(), i)
@@ -406,6 +434,8 @@ local function CreateListPanel(parent, cfg)
         if not value then return end
         local list = cfg.get()
         if editing and list[editing] then
+            -- keep a disabled keyword disabled while editing it
+            if cfg.isOff and cfg.isOff(list[editing]) then value = cfg.setOff(value, true) end
             list[editing] = value
         else
             table.insert(list, value)
@@ -796,7 +826,9 @@ local function CreateMainFrame()
         build = BuildKeyword,
         format = FormatKeyword,
         parse = ParseKeyword,
-        tip = "Get alerted when chat contains what you type below. Separate words with commas when ALL of them must appear (e.g. tank,dungeon). Spaces count exactly as typed, so \" tank \" only matches the whole word. Use Edit on a row to change it.",
+        isOff = IsOff,
+        setOff = SetOff,
+        tip = "Get alerted when chat contains what you type below. Separate words with commas when ALL of them must appear (e.g. tank,dungeon). Spaces count exactly as typed, so \" tank \" only matches the whole word. Use Edit on a row to change it, and On/Off to pause a keyword without deleting it.",
         label = "Message contains:",
         placeholder = "e.g. LFM Molten Core    or    tank,healer",
         label2 = "...but NOT any of these (optional):",
@@ -891,6 +923,8 @@ local commands =
         print("Chat Scanner - type /CS to open the window. Commands:")
         print("/CS add [String] - add keyword (underscore = space, | = must match all, - = exclude)")
         print("/CS del [number] - remove keyword")
+        print("/CS toggle [number] [number] ... - turn keywords on/off (e.g. /CS toggle 1 2 3)")
+        print("/CS edit [number] [String] - replace a keyword (same format as add)")
         print("/CS clear - clear keywords")
         print("/CS list - print keywords")
         print("/CS addplayer [Name] - ignore a player")
@@ -915,7 +949,7 @@ local commands =
         if whitelistedStringTable == nil then
             whitelistedStringTable = {}
         end
-        textstr = textstr:gsub("_", " ")
+        textstr = textstr:gsub("_", " "):gsub("^~+", "")
         table.insert(whitelistedStringTable, textstr)
         print("-- Added: " .. FormatKeyword(textstr))
         Refresh()
@@ -929,6 +963,44 @@ local commands =
         end
         print("-- Removed " .. key .. ": " .. FormatKeyword(whitelistedStringTable[key]))
         table.remove(whitelistedStringTable, key)
+        Refresh()
+    end,
+
+    ["toggle"] = function(...)
+        local n = select("#", ...)
+        if n == 0 then
+            print("Usage: /CS toggle [number] [number] ...")
+            return
+        end
+        for i = 1, n do
+            local arg = select(i, ...)
+            local key = tonumber(arg)
+            local v = key and whitelistedStringTable and whitelistedStringTable[key]
+            if not v then
+                print("-- Invalid key number: " .. tostring(arg))
+            else
+                v = SetOff(v, not IsOff(v))
+                whitelistedStringTable[key] = v
+                print("-- " .. key .. ": " .. (IsOff(v) and "|cffff4040OFF|r " or "|cff00ff00ON|r ") .. FormatKeyword(v))
+            end
+        end
+        Refresh()
+    end,
+
+    ["edit"] = function(key, textstr)
+        key = tonumber(key)
+        if not key or not whitelistedStringTable or not whitelistedStringTable[key] then
+            print("-- Invalid key number")
+            return
+        end
+        if not textstr or textstr == "" then
+            print("Usage: /CS edit [number] [Keyword]")
+            return
+        end
+        textstr = textstr:gsub("_", " "):gsub("^~+", "")
+        if IsOff(whitelistedStringTable[key]) then textstr = "~" .. textstr end
+        whitelistedStringTable[key] = textstr
+        print("-- Edited " .. key .. ": " .. FormatKeyword(textstr))
         Refresh()
     end,
 
@@ -1156,7 +1228,7 @@ chatFrameScanner:SetScript("OnEvent", function(self, event, message, sender, cha
     message = message:gsub("☺", "")
 
     for id, v in ipairs(whitelistedStringTable) do
-        if v and v ~= "" then
+        if v and v ~= "" and not IsOff(v) then
             local checkFound = true
             for w in string.gmatch(v:lower(), "([^|]+)") do
                 local isExclude = (string.sub(w, 1, 1) == "-")
