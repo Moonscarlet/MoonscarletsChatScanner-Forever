@@ -1,53 +1,62 @@
 # Moonscarlet's Chat Scanner
 
-Chat Scanner watches chat for you and alerts you only when someone posts something you are waiting for, with a sound and a clickable class-colored player name so you can whisper/invite right away.
+Chat Scanner watches chat for you and alerts you when someone posts something you care about, complete with sounds and clickable, class-colored player names. It also includes a built-in Chat Filter to hide spam and boost services, independent switches for scanning and filtering, and full regex support.
 
 ## How I use it
-I keep Trade, LFG and World in a separate chat tab, so my main tab stays clean. When I'm looking for something, I add it to the watch list and get an alert in my main tab only when it shows up.
+I keep Trade, LFG and World in a separate chat tab, so my main tab stays clean. When I'm looking for a group or an item, I add it to the watch list and get alerted in my main tab only when it shows up. I also add common spam phrases into the Filter tab so trade chat clutter never shows up in any chat window.
 
 ## Features
-- **Simple in-game window.** Type `/cs` or click the minimap button. No commands needed.
-- **Smart keywords.** Match a word or phrase, require several words at once, or skip messages containing words you don't want (for example, find "LFM Molten Core" but skip "gold").
-- **Edit anytime.** Change a keyword in place with one click.
-- **Choose your chats.** Guild, Say, Yell and channels are on by default. Party, Raid, Battleground, Officer and Whispers are optional.
-- **Ignore list.** Silence spammers in the scanner without touching your normal ignore list.
-- **Pick your sound.** Choose the alert sound from a list and hear each one as you pick it. It can play even if game sound is muted.
-- **Pick your color.** Choose the color of the alert text, with a Reset button to get the default blue back.
-- **Pick your chat tab.** Send alerts to any of your chat tabs, not just the first one.
-- **Raid warning style alert (optional).** Also show the match as big text in the middle of your screen.
-- **Taskbar flash (optional)** when the game is in the background.
-- **Class-colored, clickable player names** in every alert.
-- Your own messages and repeated messages are skipped, and everything is saved between sessions.
+- **Simple in-game window.** Type `/cs` or click the minimap button.
+- **Chat Filter.** Block and hide messages matching phrases or patterns from all chat windows.
+- **Independent Controls.** Scanning alerts and chat filtering have separate switches. Turn off sound notifications without disabling spam filtering.
+- **Regex & Lua Pattern support.** Toggle between Normal words and Regex mode (`\b`, `\w`, `\s`, `\d`).
+- **Session Blocked Log.** Click "View Blocked" on the Filter tab (or `/cs log`) to review messages blocked during your session. Click any player name to whisper them directly.
+- **Smart keywords.** Match phrases, require multiple words at once, or exclude words you don't want (e.g. find "LFM Molten Core" but skip "gold").
+- **Drag to reorder.** Easily drag the `::` handle on any row to change keyword or filter order.
+- **Friend and Guild protection.** Option to ensure friends and guild members are never filtered out.
+- **Edit anytime.** Change a keyword or filter in place with one click.
+- **Choose your chats.** Guild, Say, Yell and channels on by default. Party, Raid, Battleground, Officer and Whispers optional.
+- **Ignore list.** Silence specific players in the scanner without affecting your in-game ignore list.
+- **Pick your sound.** Choose your alert sound from a list and preview each one. Can play through the Master volume channel even when game sound is muted.
+- **Pick your color & chat tab.** Choose your alert text color and the chat tab where alerts are printed.
+- **Raid warning & taskbar flash.** Optional screen-center banner and taskbar icon flashing.
+- **Clean and saved.** Skips your own messages, NPCs, and duplicate posts. Window is fully resizable and all settings save across sessions.
 
 ## Getting started
 1. Type `/cs` (or click the minimap button).
-2. On the **Keywords** tab, type what you're looking for and press Enter.
-3. Check the **Chats** tab to choose where to listen.
-4. Open the **Settings** tab to choose your sound, color, chat tab and alert style, then click **Test notification** to try it.
+2. On the **Keywords** tab, add what you want alerts for.
+3. On the **Filter** tab (`/cs f`), add spam phrases you want hidden from chat.
+4. Check the **Chats** tab to choose where to listen.
+5. Open the **Settings** tab to choose your sound, color, and preferences, then click **Test notification**.
 
-## Keywords
-| You type | It matches |
-|---|---|
-| `LFM Molten Core` | messages containing that phrase |
-| `tank,dungeon` (commas) | messages containing **both** words |
-| *Message contains:* `LFM MC` + *but NOT:* `gold,boost` | LFM MC, but not if it mentions gold or boost |
+## Keywords & Filters
+| Mode | Input | Matches |
+|---|---|---|
+| Normal | `LFM Molten Core` | messages containing that phrase |
+| Normal | `tank,dungeon` (commas) | messages containing **both** words |
+| Normal | Contains: `LFM MC` + NOT: `gold,boost` | LFM MC, but skips mentions of gold or boost |
+| Regex | `\b\w+e\w+\b` | words with characters surrounding 'e' |
+| Regex | `\bboost\b` | the exact word "boost" |
 
-Spaces count exactly as typed, so `" tank "` only matches the whole word "tank" and not "tanked".
+Spaces count exactly as typed, so `" tank "` only matches the whole word "tank".
 
 ## Slash commands (optional)
 | Command | What it does |
 |---|---|
 | `/cs` | Open or close the window |
+| `/cs f` or `/cs filter [on\|off]` | Open the Filter tab, or turn chat filtering on/off |
+| `/cs log` | Open the blocked messages log |
 | `/cs add [text]` | Add a keyword (`_` = space, `\|` = all must match, `-` = exclude) |
+| `/cs addregex [pattern]` | Add a regex keyword |
 | `/cs del [number]` | Remove a keyword |
-| `/cs toggle [number] [number] ...` | Turn keywords on/off (e.g. `/cs toggle 1 2 3`) |
-| `/cs edit [number] [String]` | Replace a keyword (same format as add) |
-| `/cs list` | Show your keywords and settings |
+| `/cs toggle [number] ...` | Turn keywords on/off (e.g. `/cs toggle 1 2 3`) |
+| `/cs edit [number] [string]` | Replace a keyword |
+| `/cs list` | Show your keywords, filters, and settings |
 | `/cs clear` | Clear all keywords |
 | `/cs addplayer [name]` | Ignore a player |
 | `/cs delplayer [number]` | Stop ignoring a player |
 | `/cs players` | Show ignored players |
 | `/cs clearplayers` | Clear the ignore list |
-| `/cs enable` / `/cs disable` | Turn scanning on or off |
+| `/cs enable` / `/cs disable` | Turn scanner alerts on or off |
 | `/cs mute` / `/cs master` / `/cs flash` | Toggle sound / play when muted / taskbar flash |
 | `/cs help` | Show all commands |
